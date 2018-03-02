@@ -1,0 +1,145 @@
+
+function filename=jobs_Stampede(core,TaskNum,RunTime,TaskPerNode)
+if nargin<3
+    RunTime=48;
+end
+if nargin<4
+    TaskPerNode = 10;
+end
+filename = [core,'.LS5'];
+fid = fopen(filename,'W');
+
+
+
+fprintf(fid,'#!/bin/bash\n');
+fprintf(fid,'#\n');
+fprintf(fid,'# Simple SLURM script for submitting multiple serial\n');
+fprintf(fid,'# jobs (e.g. parametric studies) using a script wrapper\n');
+fprintf(fid,'# to launch the jobs.\n');
+fprintf(fid,'#\n');
+fprintf(fid,'# To use, build the launcher executable and your\n');
+fprintf(fid,'# serial application(s) and place them in your WORKDIR\n');
+fprintf(fid,'# directory.  Then, edit the CONTROL_FILE to specify\n');
+fprintf(fid,'# each executable per process.\n');
+fprintf(fid,'#-------------------------------------------------------\n');
+fprintf(fid,'#-------------------------------------------------------\n');
+fprintf(fid,'#\n'); 
+
+
+
+
+fprintf(fid,'# \n');
+fprintf(fid,'#------------------Scheduler Options--------------------\n');
+fprintf(fid,'#SBATCH -J %s          # Job name\n',core);
+%fprintf(fid,'#SBATCH -N %d                   # Total number of nodes (16 cores/node)\n',ceil(TaskNum/TaskPerNode));
+fprintf(fid,'#SBATCH -n %d                  # Total number of tasks\n',TaskNum);
+fprintf(fid,'#SBATCH -p normal          # Queue name\n');
+fprintf(fid,'#SBATCH -o %s.o%%j       # Name of stdout output file (%%j expands to jobid) \n',core);
+fprintf(fid,'#SBATCH -t %d:00:00            # Run time (hh:mm:ss)\n',RunTime);
+fprintf(fid,'#SBATCH --mail-user=mzhou@utexas.edu\n');
+fprintf(fid,'#SBATCH --mail-type=begin  # email me when the job starts\n');
+fprintf(fid,'#SBATCH --mail-type=end    # email me when the job finishes\n');
+fprintf(fid,'#      <------------ Account String ------------>\n');
+fprintf(fid,'# <--- (Use this ONLY if you have MULTIPLE accounts) --->\n');
+fprintf(fid,'#SBATCH -A ParNBP\n'); 
+
+export LAUNCHER_PLUGIN_DIR=$LAUNCHER_DIR/plugins
+export LAUNCHER_RMI=SLURM
+export LAUNCHER_JOB_FILE=jobfile
+ 
+$LAUNCHER_DIR/paramrun
+
+fprintf(fid,'module load launcher\n');
+%fprintf(fid,'module load matlab/2014b\n');
+fprintf(fid,'module load matlab\n');
+fprintf(fid,'export TACC_LAUNCHER_PPN=%d\n',TaskPerNode);
+fprintf(fid,'export EXECUTABLE=$TACC_LAUNCHER_DIR/init_launcher\n');
+%fprintf(fid,'export EXECUTABLE=init_launcher\n');
+fprintf(fid,'export WORKDIR=.\n');
+fprintf(fid,'export CONTROL_FILE=%s.q\n',core);
+fprintf(fid,'\n');
+fprintf(fid,'# Variable descriptions:\n');
+fprintf(fid,'#\n');
+fprintf(fid,'#  TACC_LAUNCHER_PPN = number of simultaneous processes per host\n');
+fprintf(fid,'#                      - if this variable is not set, value is\n');
+fprintf(fid,'#                        determined by the process density/wayness\n');
+fprintf(fid,'#                        specified in ''Scheduler Options''\n');
+fprintf(fid,'#  EXECUTABLE        = full path to the job launcher executable\n');
+fprintf(fid,'#  WORKDIR           = location of working directory\n');
+fprintf(fid,'#  CONTROL_FILE      = text input file which specifies\n');
+fprintf(fid,'#                      executable for each process\n');
+fprintf(fid,'#                      (should be located in WORKDIR)\n');
+fprintf(fid,'#------------------------------------------------------\n');
+fprintf(fid,'\n');
+fprintf(fid,'#--------- Intel Xeon Phi Options (EXPERIMENTAL) -------------\n');
+fprintf(fid,'export TACC_LAUNCHER_NPHI=0\n');
+fprintf(fid,'export TACC_LAUNCHER_PHI_PPN=8\n');
+fprintf(fid,'export PHI_WORKDIR=.\n');
+fprintf(fid,'export PHI_CONTROL_FILE=phiparamlist\n');
+fprintf(fid,'\n');
+fprintf(fid,'# Variable descriptions:\n');
+fprintf(fid,'#  TACC_LAUNCHER_NPHI    = number of Intel Xeon Phi cards to use per node\n');
+fprintf(fid,'#                          (use 0 to disable use of Xeon Phi cards)\n');
+fprintf(fid,'#  TACC_LAUNCHER_PHI_PPN = number of simultaneous processes per Xeon Phi card\n');
+fprintf(fid,'#  PHI_WORKDIR           = location of working directory for Intel Xeon Phi jobs\n');
+fprintf(fid,'#  PHI_CONTROL_FILE      = text input file which specifies executable\n');
+fprintf(fid,'#                          for each process to be run on Intel Xeon Phi\n');
+fprintf(fid,'#                          (should be located in PHI_WORKDIR)\n');
+fprintf(fid,'#------------------------------------------------------\n');
+fprintf(fid,'\n');
+fprintf(fid,'#------------ Task Scheduling Options -----------------\n');
+fprintf(fid,'export TACC_LAUNCHER_SCHED=interleaved\n');
+fprintf(fid,'\n');
+fprintf(fid,'# Variable descriptions:\n');
+fprintf(fid,'#  TACC_LAUNCHER_SCHED = scheduling method for lines in CONTROL_FILE\n');
+fprintf(fid,'#                        options (k=process, n=num. lines, p=num. procs):\n');
+fprintf(fid,'#                          - interleaved (default): \n');
+fprintf(fid,'#                              process k executes every k+nth line\n');
+fprintf(fid,'#                          - block:\n');
+fprintf(fid,'#                              process k executes lines [ k(n/p)+1 , (k+1)(n/p) ]\n');
+fprintf(fid,'#                          - dynamic:\n');
+fprintf(fid,'#                              process k executes first available unclaimed line\n');
+fprintf(fid,'#--------------------------------------------------------\n');
+fprintf(fid,'\n');
+fprintf(fid,'#----------------\n');
+fprintf(fid,'# Error Checking\n');
+fprintf(fid,'#----------------\n');
+fprintf(fid,'\n');
+fprintf(fid,'if [ ! -d $WORKDIR ]; then\n');
+fprintf(fid,'        echo " "\n');
+fprintf(fid,'	echo "Error: unable to change to working directory."\n');
+fprintf(fid,'	echo "       $WORKDIR"\n');
+fprintf(fid,'	echo " "\n');
+fprintf(fid,'	echo "Job not submitted."\n');
+fprintf(fid,'	exit\n');
+fprintf(fid,'fi\n');
+fprintf(fid,'\n');
+fprintf(fid,'if [ ! -x $EXECUTABLE ]; then\n');
+fprintf(fid,'	echo " "\n');
+fprintf(fid,'	echo "Error: unable to find launcher executable $EXECUTABLE."\n');
+fprintf(fid,'	echo " "\n');
+fprintf(fid,'	echo "Job not submitted."\n');
+fprintf(fid,'	exit\n');
+fprintf(fid,'fi\n');
+fprintf(fid,'\n');
+fprintf(fid,'if [ ! -e $WORKDIR/$CONTROL_FILE ]; then\n');
+fprintf(fid,'	echo " "\n');
+fprintf(fid,'	echo "Error: unable to find input control file $CONTROL_FILE."\n');
+fprintf(fid,'	echo " "\n');
+fprintf(fid,'	echo "Job not submitted."\n');
+fprintf(fid,'	exit\n');
+fprintf(fid,'fi\n');
+fprintf(fid,'\n');
+fprintf(fid,'#----------------\n');
+fprintf(fid,'# Job Submission\n');
+fprintf(fid,'#----------------\n');
+fprintf(fid,'\n');
+fprintf(fid,'cd $WORKDIR/\n');
+fprintf(fid,'echo " WORKING DIR:   $WORKDIR/"\n');
+fprintf(fid,'\n');
+fprintf(fid,'$TACC_LAUNCHER_DIR/paramrun SLURM $EXECUTABLE $WORKDIR $CONTROL_FILE $PHI_WORKDIR $PHI_CONTROL_FILE\n');
+fprintf(fid,'\n');
+fprintf(fid,'echo " "\n');
+fprintf(fid,'echo " Parameteric Job Complete"\n');
+fprintf(fid,'echo " "\n');
+fclose(fid);
